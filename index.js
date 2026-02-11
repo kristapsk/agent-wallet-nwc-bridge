@@ -287,7 +287,14 @@ State file: ${STATE_PATH}
             await sendError(ev, clientPub, enc, 'OTHER', 'make_invoice requires params.amount (msats) > 0', 'make_invoice');
             return;
           }
-          const sats = Math.ceil(amount / 1000);
+          // NWC specifies `amount` in millisatoshis, but agent-wallet `receive` takes whole sats.
+          // IMPORTANT: round DOWN to avoid generating an invoice larger than the requested amount.
+          // (Rounding up can create mismatches like request=599,400msat → invoice=600,000msat.)
+          const sats = Math.max(1, Math.floor(amount / 1000));
+          const remainder = amount % 1000;
+          if (remainder !== 0) {
+            console.log(`[nwc] make_invoice: requested_msat=${amount} not whole-sat; rounding down to sats=${sats} (msat=${sats * 1000}) remainder_msat=${remainder}`);
+          }
           const j = runAgentWallet(['receive', String(sats), '--description', description || 'NWC invoice']);
           await sendResult(ev, clientPub, enc, 'make_invoice', { invoice: j.invoice, payment_hash: j.payment_hash });
           return;
