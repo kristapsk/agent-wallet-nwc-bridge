@@ -198,6 +198,19 @@ State file: ${STATE_PATH}
   console.log(`agent-wallet-nwc-bridge running as wallet service pubkey: ${wsPk}`);
   console.log(`relays: ${effectiveRelays.join(', ')}`);
 
+  // Hardening against relay/library quirks:
+  // Some relays respond with errors (e.g. "restricted" writes). In certain nostr-tools versions,
+  // these can surface as uncaught exceptions from websocket message handlers.
+  // We log and keep the bridge alive.
+  process.on('unhandledRejection', (reason) => {
+    const msg = (reason && (reason.stack || reason.message)) ? (reason.stack || reason.message) : String(reason);
+    console.warn('[nostr] unhandledRejection:', msg);
+  });
+  process.on('uncaughtException', (err) => {
+    const msg = (err && (err.stack || err.message)) ? (err.stack || err.message) : String(err);
+    console.error('[nostr] uncaughtException:', msg);
+  });
+
   // Publish info event (replaceable)
   // We claim support for: pay_invoice, make_invoice, get_balance, get_info
   const infoEvent = finalizeEvent({
@@ -211,7 +224,39 @@ State file: ${STATE_PATH}
     pubkey: wsPk,
   }, wsSk);
 
-  await pool.publish(effectiveRelays, infoEvent);
+  async function publishBestEffort(event, label) {
+    // Publish to relays in a best-effort way:
+    // - a single relay failure must NOT crash the bridge
+    // - success is "at least one relay accepted the event"
+    const results = await Promise.allSettled(
+      effectiveRelays.map(async (url) => {
+        try {
+          await pool.publish([url], event);
+          return { url, ok: true };
+        } catch (e) {
+          return { url, ok: false, err: e };
+        }
+      })
+    );
+
+    const ok = results.filter(r => r.status === 'fulfilled' && r.value && r.value.ok).map(r => r.value.url);
+    const bad = results
+      .map(r => (r.status === 'fulfilled' ? r.value : ({ url: 'unknown', ok: false, err: r.reason })))
+      .filter(v => !v.ok);
+
+    for (const r of bad) {
+      const msg = r?.err?.message || String(r?.err || 'unknown error');
+      console.warn(`[nostr] publish failed (${label}) relay=${r.url} err=${msg}`);
+    }
+
+    if (ok.length === 0) {
+      console.error(`[nostr] publish failed on all relays (${label})`);
+      return false;
+    }
+    return true;
+  }
+
+  await publishBestEffort(infoEvent, 'info');
 
   // Subscribe for requests addressed to us
   const sub = pool.subscribeMany(effectiveRelays, { kinds: [23194], '#p': [wsPk] }, {
@@ -376,7 +421,8 @@ State file: ${STATE_PATH}
       pubkey: wsPk,
     }, wsSk);
 
-    await pool.publish(effectiveRelays, resp);
+    // Best-effort publish: don't crash if a relay rejects writes.
+    await publishBestEffort(resp, `response:${payloadObj.result_type}`);
     console.log(`[nwc] responded to=${clientPub} kind=23195 e=${reqEvent.id}`);
   }
 
