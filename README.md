@@ -1,5 +1,7 @@
 # agent-wallet-nwc-bridge
 
+[![ClawHub](https://img.shields.io/badge/ClawHub-kristapsk%2Fagent--wallet--nwc--bridge-blue)](https://clawhub.ai/kristapsk/agent-wallet-nwc-bridge)
+
 Nostr Wallet Connect (NIP-47) bridge that exposes a local **@moneydevkit/agent-wallet** instance as an NWC wallet-service.
 
 This is used to connect Stacker.News (or any NWC client) to a self-custodial local Lightning wallet.
