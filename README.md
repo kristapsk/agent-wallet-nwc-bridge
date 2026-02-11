@@ -4,6 +4,14 @@ Nostr Wallet Connect (NIP-47) bridge that exposes a local **@moneydevkit/agent-w
 
 This is used to connect Stacker.News (or any NWC client) to a self-custodial local Lightning wallet.
 
+## Support / donate
+
+If this project is useful, you can send sats to:
+
+- Lightning Address: **`liene@stacker.news`**
+- Stacker.News profile (zap/donate): https://stacker.news/liene
+- Some wallets also support the `lightning:` URI: `lightning:liene@stacker.news`
+
 ## What it does
 
 - Listens on one or more Nostr relays for NWC requests (kind `23194`).
